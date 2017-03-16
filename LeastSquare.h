@@ -118,10 +118,10 @@ namespace LeastSquare
 {
 
 template <typename Tx, typename Ty, typename Tp>
-class BaseModelClass
+class BaseModel
 {
 public:
-	BaseModelClass(const int NumDomain_, const int NumParameter_, const int NumDimension_ = 1)
+	BaseModel(const int NumDomain_, const int NumParameter_, const int NumDimension_ = 1)
 	: NumDomain(NumDomain_), NumParameter(NumParameter_), NumDimension(NumDimension_) 
 	{
 		assert(NumDomain > 0);
@@ -154,7 +154,7 @@ public:
 		return result;
 	}
 
-	virtual ~BaseModelClass()
+	virtual ~BaseModel()
 	{
 		if(xi != nullptr) delete [] xi;
 		if(yi != nullptr) delete [] yi;
@@ -185,14 +185,14 @@ protected:
 
 
 template<typename Tx, typename Ty, typename Tp>
-void Levenberg_Marquardt(const BaseModelClass<Tx,Ty,Tp>* model, Tp* parameter, const int Iter = (int)1e4, const double Tol = 1e-4)
+void Levenberg_Marquardt(const BaseModel<Tx,Ty,Tp>* model, Tp* parameter, const int Iter = (int)1e4, const double Tol = 1e-4)
 {
 	const char UPLO='U', TRANS='N';
 	const double ALPHA = 1., mALPHA = -1., BETA = 0, oBETA = 1., nu = 10.;
 	const int INC = 1, 
-		   Np = model -> getData(BaseModelClass<Tx,Ty,Tp>::dataList::num_parameter),
-		   Nd = model -> getData(BaseModelClass<Tx,Ty,Tp>::dataList::num_domain) * 
-		        model -> getData(BaseModelClass<Tx,Ty,Tp>::dataList::num_dimension);
+		   Np = model -> getData(BaseModel<Tx,Ty,Tp>::dataList::num_parameter),
+		   Nd = model -> getData(BaseModel<Tx,Ty,Tp>::dataList::num_domain) * 
+		        model -> getData(BaseModel<Tx,Ty,Tp>::dataList::num_dimension);
 	double lambda = 1., temp = 0, before = 0, after = 0, initial = 0;
 	int iter = 0;
 	std::vector<Tp> p(Np), grad(Np), r_array(Nd), Jacobian(Nd*Np), JT_J(Np*Np),

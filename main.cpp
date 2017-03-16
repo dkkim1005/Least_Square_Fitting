@@ -4,17 +4,17 @@
 
 // case 1. linear fitting
 template <typename Tx, typename Ty, typename Tp> 
-class LinearModel : public LeastSquare::BaseModelClass<Tx,Ty,Tp>
+class LinearModel : public LeastSquare::BaseModel<Tx,Ty,Tp>
 {
-        using LeastSquare::BaseModelClass<Tx,Ty,Tp>::NumDomain;
-        using LeastSquare::BaseModelClass<Tx,Ty,Tp>::NumParameter;
-        using LeastSquare::BaseModelClass<Tx,Ty,Tp>::NumDimension;
-        using LeastSquare::BaseModelClass<Tx,Ty,Tp>::xi;
-        using LeastSquare::BaseModelClass<Tx,Ty,Tp>::yi;
+        using LeastSquare::BaseModel<Tx,Ty,Tp>::NumDomain;
+        using LeastSquare::BaseModel<Tx,Ty,Tp>::NumParameter;
+        using LeastSquare::BaseModel<Tx,Ty,Tp>::NumDimension;
+        using LeastSquare::BaseModel<Tx,Ty,Tp>::xi;
+        using LeastSquare::BaseModel<Tx,Ty,Tp>::yi;
 
 public:
         LinearModel(const int NumDomain_, const int NumParameter_)
-        : LeastSquare::BaseModelClass<Tx,Ty,Tp>(NumDomain_, NumParameter_)
+        : LeastSquare::BaseModel<Tx,Ty,Tp>(NumDomain_, NumParameter_)
         {}
 
         virtual double cost(const Tp* parameter) const
@@ -43,17 +43,17 @@ public:
 
 // case 2. non-linear fitting(square function)
 template <typename Tx, typename Ty, typename Tp> 
-class SquareModel : public LeastSquare::BaseModelClass<Tx,Ty,Tp>
+class SquareModel : public LeastSquare::BaseModel<Tx,Ty,Tp>
 {
-        using LeastSquare::BaseModelClass<Tx,Ty,Tp>::NumDomain;
-        using LeastSquare::BaseModelClass<Tx,Ty,Tp>::NumParameter;
-        using LeastSquare::BaseModelClass<Tx,Ty,Tp>::NumDimension;
-        using LeastSquare::BaseModelClass<Tx,Ty,Tp>::xi;
-        using LeastSquare::BaseModelClass<Tx,Ty,Tp>::yi;
+        using LeastSquare::BaseModel<Tx,Ty,Tp>::NumDomain;
+        using LeastSquare::BaseModel<Tx,Ty,Tp>::NumParameter;
+        using LeastSquare::BaseModel<Tx,Ty,Tp>::NumDimension;
+        using LeastSquare::BaseModel<Tx,Ty,Tp>::xi;
+        using LeastSquare::BaseModel<Tx,Ty,Tp>::yi;
 
 public:
         SquareModel(const int NumDomain_, const int NumParameter_)
-        : LeastSquare::BaseModelClass<Tx,Ty,Tp>(NumDomain_, NumParameter_)
+        : LeastSquare::BaseModel<Tx,Ty,Tp>(NumDomain_, NumParameter_)
         {}
 
         virtual double cost(const Tp* parameter) const
@@ -86,7 +86,7 @@ public:
 };
 
 
-typedef LeastSquare::BaseModelClass<double,double,double> baseModel;
+typedef LeastSquare::BaseModel<double,double,double> baseModel;
 
 int main()
 {
@@ -100,7 +100,7 @@ int main()
 	for(int i=0;i<NumDomain;++i)
 	{
 		x[i] = i;
-		y[i] = M_PI*x[i]*x[i] + 123*x[i] + 21;
+		y[i] = 3*x[i]*x[i] + 123*x[i] + 21;
 	}
 
 	baseModel* model = new SquareModel<double, double, double>(NumDomain, NumParameter);
