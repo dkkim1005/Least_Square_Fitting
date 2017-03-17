@@ -100,7 +100,7 @@ int main()
 	for(int i=0;i<NumDomain;++i)
 	{
 		x[i] = i;
-		y[i] = 3*x[i]*x[i] + 123*x[i] + 21;
+		y[i] = 3*x[i]*x[i] + 123*x[i];
 	}
 
 	baseModel *linear = new LinearModel<double, double>(NumDomain, 2),

@@ -2,7 +2,8 @@
 #include <cstring>
 #include <vector>
 #include <cmath>
-#include <assert.h>
+#include <cstdlib>
+#include <cassert>
 
 #ifndef LEAST_SQUARE_FITTING
 #define LEAST_SQUARE_FITTING
@@ -83,7 +84,7 @@ inline void invSymMatrix(const int N, const double* A, double* inv_A, const char
 		if(INFO != 0)
 		{
 			std::cout<<"ERROR IN DSYTRF(1)"<<std::endl;
-			assert(false);
+			std::abort();
 		}
 
 		LWORK = (int)temp_WORK;
@@ -96,7 +97,7 @@ inline void invSymMatrix(const int N, const double* A, double* inv_A, const char
 		if(INFO != 0)
 		{
 			std::cout<<"ERROR IN DSYTRF(2)"<<std::endl;
-			assert(false);
+			std::abort();
 		}
 
 		std::vector<double>().swap(WORK);
@@ -107,7 +108,7 @@ inline void invSymMatrix(const int N, const double* A, double* inv_A, const char
 		if(INFO != 0)
 		{
 			std::cout<<"ERROR IN DSYTRI"<<std::endl;
-			assert(false);
+			std::abort();
 		}
 	}
 }
@@ -148,7 +149,7 @@ public:
 				break;
 			default:
 				std::cout<<"error! check your arguments"<<std::endl;
-				assert(false);
+				std::abort();
 		}
 
 		return result;
@@ -209,7 +210,8 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 	{
 		if( lambda > 1e20) 
 		{
-			std::cout<<"lambda is too huge."<<std::endl;
+			std::cout<<"lambda is too huge."<<
+			"(iter:"<<iter<<",cost:"<<initial<<")"<<std::endl;
 			break;
 		}
 		/*
