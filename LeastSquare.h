@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cassert>
+#include <fstream>
 
 #ifndef LEAST_SQUARE_FITTING
 #define LEAST_SQUARE_FITTING
@@ -164,7 +165,7 @@ public:
 	virtual void inData(const std::vector<Tx>& v_xi, const std::vector<Ty>& v_yi)
 	{
 		assert(v_xi.size() == NumDomain*NumDimension);
-		assert(v_yi.size() == NumDomain*NumDimension);
+		assert(v_yi.size() == NumDomain);
 
 		std::memcpy(xi, &v_xi[0], sizeof(Tx)*NumDomain*NumDimension);
 		std::memcpy(yi, &v_yi[0], sizeof(Ty)*NumDomain*NumDimension);
@@ -185,6 +186,38 @@ protected:
 };
 
 
+void loadtxt(const char fileName[], const int numDimX, 
+	std::vector<double>& xi, std::vector<double>& yi)
+{
+	std::vector<double> xi_, yi_;
+	double temp;
+	std::ifstream file(fileName);
+
+	assert(file.is_open());
+
+	while(!file.eof())
+	{
+		for(int i=0;i<numDimX;++i)
+		{
+			file >> temp;
+			xi_.push_back(temp);
+		}
+		file >> temp;
+		yi_.push_back(temp);
+	}
+
+	const int length = yi_.size() - 1;
+
+	xi_.erase(xi_.begin() + numDimX*length, xi_.begin() + numDimX*(length+1));
+	yi_.erase(yi_.begin() + length, yi_.begin() + length + 1);
+
+	xi_.swap(xi);
+	yi_.swap(yi);
+
+	file.close();
+}
+
+
 template<typename Tx, typename Ty>
 void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const int Iter = (int)1e4, const double Tol = 1e-4)
 {
@@ -194,7 +227,7 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 		   Np = model -> getData(BaseModel<Tx,Ty>::dataList::num_parameter),
 		   Nd = model -> getData(BaseModel<Tx,Ty>::dataList::num_domain) * 
 		        model -> getData(BaseModel<Tx,Ty>::dataList::num_dimension);
-	double lambda = 1., temp = 0, before = 0, after = 0, initial = 0;
+	double lambda = 1., gradNorm = 0, before = 0, after = 0, initial = 0;
 	int iter = 0;
 	std::vector<double> p(Np), grad(Np), r_array(Nd), Jacobian(Nd*Np), JT_J(Np*Np),
 			tot_M(Np*Np), inv_M(Np*Np), p_before(Np), p_after(Np);
@@ -210,8 +243,7 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 	{
 		if( lambda > 1e20) 
 		{
-			std::cout<<"lambda is too huge."<<
-			"(iter:"<<iter<<",cost:"<<initial<<")"<<std::endl;
+			std::cout<<"lambda is too huge.";
 			break;
 		}
 		/*
@@ -225,12 +257,12 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 		for(int i=0;i<Nd;i++) r_array[i] = model -> cost(&p[0], i);
 
 		dgemv_(&TRANS, &Np, &Nd, &ALPHA, &Jacobian[0], &Np, &r_array[0], &INC, &BETA, &grad[0], &INC);
-		temp = ddot_(&Np, &grad[0], &INC, &grad[0], &INC);
-		temp = std::sqrt(temp);
+		gradNorm = ddot_(&Np, &grad[0], &INC, &grad[0], &INC);
+		gradNorm = std::sqrt(gradNorm);
 
-		if( temp < Tol)
+		if( gradNorm < Tol)
 		{
-			std::cout<<"converge! (0.5*|f(x) - y|^2 : "<<temp<<")"<<std::endl;
+			std::cout<<"converge!";
 			break;
 		}
 
@@ -295,6 +327,8 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 	}
 
 	std::memcpy(parameter, &p[0], sizeof(double)*Np);
+
+	std::cout<<"(iter:"<<iter<<", cost:"<<initial<<", grad norm:"<<gradNorm<<")"<<std::endl;
 
 	for(int i=0;i<Np;i++) 
 		std::cout<<"p["<<i<<"]="<<p[i]<<" ";
