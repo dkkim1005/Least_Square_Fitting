@@ -117,7 +117,7 @@ inline void invSymMatrix(const int N, const double* A, double* inv_A, const char
 namespace LeastSquare
 {
 
-template <typename Tx, typename Ty, typename Tp>
+template <typename Tx, typename Ty>
 class BaseModel
 {
 public:
@@ -169,11 +169,11 @@ public:
 		std::memcpy(yi, &v_yi[0], sizeof(Ty)*NumDomain*NumDimension);
 	}
 
-	virtual double cost(const Tp* parameter) const = 0;
+	virtual double cost(const double* parameter) const = 0;
 
-	virtual double cost(const Tp* parameter, const int Index) const = 0;
+	virtual double cost(const double* parameter, const int Index) const = 0;
 
-	virtual void get_jacobian(const Tp* parameter, double* jacobian) const = 0;
+	virtual void get_jacobian(const double* parameter, double* jacobian) const = 0;
 
 protected:
 	const int NumDomain;
@@ -184,24 +184,24 @@ protected:
 };
 
 
-template<typename Tx, typename Ty, typename Tp>
-void Levenberg_Marquardt(const BaseModel<Tx,Ty,Tp>* model, Tp* parameter, const int Iter = (int)1e4, const double Tol = 1e-4)
+template<typename Tx, typename Ty>
+void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const int Iter = (int)1e4, const double Tol = 1e-4)
 {
 	const char UPLO='U', TRANS='N';
 	const double ALPHA = 1., mALPHA = -1., BETA = 0, oBETA = 1., nu = 10.;
 	const int INC = 1, 
-		   Np = model -> getData(BaseModel<Tx,Ty,Tp>::dataList::num_parameter),
-		   Nd = model -> getData(BaseModel<Tx,Ty,Tp>::dataList::num_domain) * 
-		        model -> getData(BaseModel<Tx,Ty,Tp>::dataList::num_dimension);
+		   Np = model -> getData(BaseModel<Tx,Ty>::dataList::num_parameter),
+		   Nd = model -> getData(BaseModel<Tx,Ty>::dataList::num_domain) * 
+		        model -> getData(BaseModel<Tx,Ty>::dataList::num_dimension);
 	double lambda = 1., temp = 0, before = 0, after = 0, initial = 0;
 	int iter = 0;
-	std::vector<Tp> p(Np), grad(Np), r_array(Nd), Jacobian(Nd*Np), JT_J(Np*Np),
+	std::vector<double> p(Np), grad(Np), r_array(Nd), Jacobian(Nd*Np), JT_J(Np*Np),
 			tot_M(Np*Np), inv_M(Np*Np), p_before(Np), p_after(Np);
 
 
-	std::memcpy(&p[0], parameter, sizeof(Tp)*Np);
-	std::memcpy(&p_before[0], parameter, sizeof(Tp)*Np);
-	std::memcpy(&p_after[0], parameter, sizeof(Tp)*Np);
+	std::memcpy(&p[0], parameter, sizeof(double)*Np);
+	std::memcpy(&p_before[0], parameter, sizeof(double)*Np);
+	std::memcpy(&p_after[0], parameter, sizeof(double)*Np);
 
 	initial = model -> cost(&p[0]);
 
@@ -257,20 +257,20 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty,Tp>* model, Tp* parameter, const 
 
 		if(before >= initial and after >= initial)
 		{
-			std::memcpy(&p_before[0], &p[0], sizeof(Tp)*Np);
-			std::memcpy(&p_after[0], &p[0], sizeof(Tp)*Np);
+			std::memcpy(&p_before[0], &p[0], sizeof(double)*Np);
+			std::memcpy(&p_after[0], &p[0], sizeof(double)*Np);
 			lambda *= nu;
 		}
 		else if(before < initial and after > initial) 
 		{
-			std::memcpy(&p[0], &p_before[0], sizeof(Tp)*Np);
-			std::memcpy(&p_after[0], &p_before[0], sizeof(Tp)*Np);
+			std::memcpy(&p[0], &p_before[0], sizeof(double)*Np);
+			std::memcpy(&p_after[0], &p_before[0], sizeof(double)*Np);
 			initial = before;
 		}
 		else if(before > initial and after < initial) 
 		{
-			std::memcpy(&p[0], &p_after[0], sizeof(Tp)*Np);
-			std::memcpy(&p_before[0], &p_after[0], sizeof(Tp)*Np);
+			std::memcpy(&p[0], &p_after[0], sizeof(double)*Np);
+			std::memcpy(&p_before[0], &p_after[0], sizeof(double)*Np);
 			lambda /= nu;
 			initial = after;
 		}
@@ -278,21 +278,21 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty,Tp>* model, Tp* parameter, const 
 		{
 			if(before > after) 
 			{
-				std::memcpy(&p[0], &p_after[0], sizeof(Tp)*Np);
-				std::memcpy(&p_before[0], &p_after[0], sizeof(Tp)*Np);
+				std::memcpy(&p[0], &p_after[0], sizeof(double)*Np);
+				std::memcpy(&p_before[0], &p_after[0], sizeof(double)*Np);
 				lambda /= nu;
 				initial = after;
 			}
 			else 
 			{
-				std::memcpy(&p[0], &p_before[0], sizeof(Tp)*Np);
-				std::memcpy(&p_after[0], &p_before[0], sizeof(Tp)*Np);
+				std::memcpy(&p[0], &p_before[0], sizeof(double)*Np);
+				std::memcpy(&p_after[0], &p_before[0], sizeof(double)*Np);
 				initial = before;
 			}
 		}
 	}
 
-	std::memcpy(parameter, &p[0], sizeof(Tp)*Np);
+	std::memcpy(parameter, &p[0], sizeof(double)*Np);
 
 	for(int i=0;i<Np;i++) 
 		std::cout<<"p["<<i<<"]="<<p[i]<<" ";
