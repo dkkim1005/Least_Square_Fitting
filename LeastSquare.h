@@ -26,16 +26,21 @@ extern "C"
 
 	double ddot_(const int* N, const double* X, const int* incx, const double* Y, const int* incy);
 
+        void dgemm_(const char* transa, const char* transb, const int* m, const int* n, 
+		const int* k, const double* alpha, const double* a, const int* lda, 
+		const double* b, const int* ldb, const double* beta, double* c, const int* ldc);
+
 	void dsymv_(const char*, const int*, const double* ALPHA, const double* A,
 		const int*, const double* X, const int*, const double* BETA,
 		double* Y,const int* );
 
 	// LAPACK subroutine
-	void dsytrf_(const char* UPLO, const int* N, double* A, const int* LDA, int* IPIV,
-		double* WORK, const int* LWORK, int* INFO);
+	void dgetrf_(const int* M, const int* N, const double* A, const int* LDA, 
+			const int* IPIV, const int* INFO);
 
-	void dsytri_(const char* UPLO, const int* N, double* A, const int* LDA, const int* IPIV,
-		double* WORK, int* INFO);
+	void dgetri_(const int* N, const double* A, const int* LDA, const int* IPIV, 
+			double* WORK, const int* LWORK, const int* INFO);
+
 }
 
 namespace lapack
@@ -77,38 +82,27 @@ inline void invSymMatrix(const int N, const double* A, double* inv_A, const char
 
 		std::memcpy(inv_A, A, sizeof(double)*N*N);
 
+		// DGETRF(1)
+		dgetrf_(&N, &N, inv_A, &N, &IPIV[0], &INFO);
+
+		if(INFO != 0)
+		{
+			std::cout<<"ERROR IN DGETRF(1)"<<std::endl;
+			std::abort();
+		}
+
 		LWORK = -1;
 
-		// DSYTRF(1)
-		dsytrf_(&UPLO, &N, inv_A, &N, &IPIV[0], &temp_WORK, &LWORK, &INFO);
+		dgetri_(&N, inv_A, &N, &IPIV[0], &temp_WORK, &LWORK, &INFO);
 
-		if(INFO != 0)
-		{
-			std::cout<<"ERROR IN DSYTRF(1)"<<std::endl;
-			std::abort();
-		}
-
-		LWORK = (int)temp_WORK;
-
+		LWORK = temp_WORK;
 		WORK.resize(LWORK);
 
-		// DSYTRF(2)
-		dsytrf_(&UPLO, &N, inv_A, &N, &IPIV[0], &WORK[0], &LWORK, &INFO);
+		dgetri_(&N, inv_A, &N, &IPIV[0], &WORK[0], &LWORK, &INFO);
 
 		if(INFO != 0)
 		{
-			std::cout<<"ERROR IN DSYTRF(2)"<<std::endl;
-			std::abort();
-		}
-
-		std::vector<double>().swap(WORK);
-		WORK.resize(N);
-
-		dsytri_(&UPLO, &N, inv_A, &N, &IPIV[0], &WORK[0], &INFO);
-
-		if(INFO != 0)
-		{
-			std::cout<<"ERROR IN DSYTRI"<<std::endl;
+			std::cout<<"ERROR IN DGETRI"<<std::endl;
 			std::abort();
 		}
 	}
@@ -130,10 +124,16 @@ public:
 		assert(NumParameter > 0);
 		assert(NumDimension > 0);
 		xi = new Tx [NumDomain * NumDimension];
-		yi = new Ty [NumDomain * NumDimension];
+		yi = new Ty [NumDomain];
 	}
 
-	enum dataList{ num_domain, num_parameter, num_dimension };
+	virtual ~BaseModel()
+	{
+		if(xi != nullptr) delete [] xi;
+		if(yi != nullptr) delete [] yi;
+	}
+
+	enum dataList{ num_domain, num_parameter};
 	int getData(const dataList Data) const
 	{
 		int result;
@@ -145,9 +145,6 @@ public:
 			case num_parameter:
 				result = NumParameter;
 				break;
-			case num_dimension:
-				result = NumDimension;
-				break;
 			default:
 				std::cout<<"error! check your arguments"<<std::endl;
 				std::abort();
@@ -156,10 +153,17 @@ public:
 		return result;
 	}
 
-	virtual ~BaseModel()
+	double cost(const double* parameter) const
 	{
-		if(xi != nullptr) delete [] xi;
-		if(yi != nullptr) delete [] yi;
+		double accum = 0;
+		for(int i=0;i<NumDomain;++i)
+			accum += std::pow(yi[i] - modelFunc(parameter, i),2);
+		return accum;
+	}
+
+	double yDelFunc(const double* parameter, const int Index) const
+	{
+		return yi[Index] - modelFunc(parameter, Index);
 	}
 
 	virtual void inData(const std::vector<Tx>& v_xi, const std::vector<Ty>& v_yi)
@@ -168,14 +172,13 @@ public:
 		assert(v_yi.size() == NumDomain);
 
 		std::memcpy(xi, &v_xi[0], sizeof(Tx)*NumDomain*NumDimension);
-		std::memcpy(yi, &v_yi[0], sizeof(Ty)*NumDomain*NumDimension);
+		std::memcpy(yi, &v_yi[0], sizeof(Ty)*NumDomain);
 	}
 
-	virtual double cost(const double* parameter) const = 0;
-
-	virtual double cost(const double* parameter, const int Index) const = 0;
+	virtual double modelFunc(const double* parameter, const int Index) const = 0;
 
 	virtual void get_jacobian(const double* parameter, double* jacobian) const = 0;
+
 
 protected:
 	const int NumDomain;
@@ -217,118 +220,130 @@ void loadtxt(const char fileName[], const int numDimX,
 	file.close();
 }
 
+template<typename Tx, typename Ty>
+void useDiffJacobian(const BaseModel<Tx,Ty>* model, const double* parameter, double* J, 
+	const int NumDomain, const int NumParameter, const double h = 1e-5)
+{
+	std::vector<double> p_pdh(NumParameter);
+	std::memcpy(&p_pdh[0], parameter, sizeof(double)*NumParameter);
+	std::vector<double> p_mdh(NumParameter);
+	std::memcpy(&p_mdh[0], parameter, sizeof(double)*NumParameter);
+
+	for(int i=0;i<NumDomain;++i)
+	{
+		for(int j=0;j<NumParameter;++j)
+		{
+			p_pdh[j] += h;
+			p_mdh[j] -= h;
+
+			J[i*NumParameter + j] = (model -> modelFunc(&p_pdh[0], i) - model -> modelFunc(&p_mdh[0], i))/(2.*h);
+
+			p_pdh[j] -= h;
+			p_mdh[j] += h;
+		}
+	}
+}
+
 
 template<typename Tx, typename Ty>
 void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const int Iter = (int)1e4, const double Tol = 1e-4)
 {
-	const char UPLO='U', TRANS='N';
-	const double ALPHA = 1., mALPHA = -1., BETA = 0, oBETA = 1., nu = 10.;
+	const char TRANS = 'N', CMODE = 'T';
+	const double ALPHA = 1., BETA = 0, nu = 2.;
 	const int INC = 1, 
 		   Np = model -> getData(BaseModel<Tx,Ty>::dataList::num_parameter),
-		   Nd = model -> getData(BaseModel<Tx,Ty>::dataList::num_domain) * 
-		        model -> getData(BaseModel<Tx,Ty>::dataList::num_dimension);
-	double lambda = 1., gradNorm = 0, before = 0, after = 0, initial = 0;
+		   Nd = model -> getData(BaseModel<Tx,Ty>::dataList::num_domain); 
+	double lambda = 1., before = 0, after = 0, initial = 0;
 	int iter = 0;
-	std::vector<double> p(Np), grad(Np), r_array(Nd), Jacobian(Nd*Np), JT_J(Np*Np),
-			tot_M(Np*Np), inv_M(Np*Np), p_before(Np), p_after(Np);
+	std::vector<double> p(Np), dp(Np), r_array(Nd), Jacobian(Nd*Np), JT_J(Np*Np),
+			p_before(Np), p_after(Np), lhs(Np*Np), rhs(Np), 
+			inv_lhs(Np*Np), i_lhs_rhs(Np);
 
 
 	std::memcpy(&p[0], parameter, sizeof(double)*Np);
-	std::memcpy(&p_before[0], parameter, sizeof(double)*Np);
-	std::memcpy(&p_after[0], parameter, sizeof(double)*Np);
 
 	initial = model -> cost(&p[0]);
 
 	while(iter < Iter)
 	{
-		if( lambda > 1e20) 
-		{
-			std::cout<<"lambda is too huge.";
-			break;
-		}
-		/*
-		std::cout<<iter<<"'th step."<<std::endl;
-		for(int i=0;i<Np;i++) 
-			std::cout<<"p["<<i<<"]="<<p[i]<<std::endl;
-		*/
 		iter += 1;
 
 		model -> get_jacobian(&p[0] ,&Jacobian[0]);
-		for(int i=0;i<Nd;i++) r_array[i] = model -> cost(&p[0], i);
 
-		dgemv_(&TRANS, &Np, &Nd, &ALPHA, &Jacobian[0], &Np, &r_array[0], &INC, &BETA, &grad[0], &INC);
-		gradNorm = ddot_(&Np, &grad[0], &INC, &grad[0], &INC);
-		gradNorm = std::sqrt(gradNorm);
+        	dgemm_(&TRANS, &CMODE, &Np, &Np, &Nd, &ALPHA, &Jacobian[0], &Np, 
+		&Jacobian[0], &Np, &BETA, &JT_J[0], &Np);
 
-		if( gradNorm < Tol)
-		{
-			std::cout<<"converge!";
-			break;
-		}
+		for(int i=0;i<Nd;i++) r_array[i] = model -> yDelFunc(&p[0], i);
 
-		dsyrk_(&UPLO, &TRANS, &Np, &Nd, &ALPHA, &Jacobian[0], &Np, &BETA, &JT_J[0], &Np);
+		std::memcpy(&lhs[0], &JT_J[0], sizeof(double)*Np*Np);
+		for(int i=0;i<Np;++i) lhs[i*Np + i] = JT_J[i*Np + i]*(1. + lambda);
+		dgemv_(&TRANS, &Np, &Nd, &ALPHA, &Jacobian[0], &Np, &r_array[0], 
+		&INC, &BETA, &rhs[0], &INC);
+		
+		lapack::invSymMatrix(Np, &lhs[0], &inv_lhs[0]);
 
+		dgemv_(&CMODE, &Np, &Np, &ALPHA, &inv_lhs[0], &Np, &rhs[0], 
+		&INC, &BETA, &i_lhs_rhs[0], &INC);
 
-		for(int i=0;i<Np*Np;i++) tot_M[i] = JT_J[i];
-		for(int i=0;i<Np;i++) tot_M[i*Np + i] += lambda*JT_J[Np*i + i];
-
-		lapack::invSymMatrix(Np, &tot_M[0], &inv_M[0], UPLO);
-
-		dsymv_(&UPLO, &Np, &mALPHA, &inv_M[0], &Np, &grad[0], &INC, &oBETA, &p_before[0], &INC);
- 
+		for(int i=0;i<Np;++i)
+			p_before[i] = p[i] + i_lhs_rhs[i];
 		before = model -> cost(&p_before[0]);
 
+		for(int i=0;i<Np;++i) lhs[i*Np + i] = JT_J[i*Np + i]*(1 + lambda/nu);
 
-		for(int i=0;i<Np*Np;i++) tot_M[i] = JT_J[i];
-		for(int i=0;i<Np;i++) tot_M[i*Np + i] += lambda/nu*JT_J[Np*i + i];
+		lapack::invSymMatrix(Np, &lhs[0], &inv_lhs[0]);
+		
+		dgemv_(&CMODE, &Np, &Np, &ALPHA, &inv_lhs[0], &Np, &rhs[0], 
+		&INC, &BETA, &i_lhs_rhs[0], &INC);
 
-		lapack::invSymMatrix(Np, &tot_M[0], &inv_M[0], UPLO);
-
-		dsymv_(&UPLO, &Np, &mALPHA, &inv_M[0], &Np, &grad[0], &INC, &oBETA, &p_after[0], &INC);
-
+		for(int i=0;i<Np;++i)
+			p_after[i] = p[i] + i_lhs_rhs[i];
 		after = model -> cost(&p_after[0]);
 
 
 		if(before >= initial and after >= initial)
 		{
-			std::memcpy(&p_before[0], &p[0], sizeof(double)*Np);
-			std::memcpy(&p_after[0], &p[0], sizeof(double)*Np);
 			lambda *= nu;
+			if(lambda > 1e30)
+			{
+				std::cout<<"lambda is too big!";
+				break;
+			}
 		}
-		else if(before < initial and after > initial) 
+		else if(before > after ) 
 		{
-			std::memcpy(&p[0], &p_before[0], sizeof(double)*Np);
-			std::memcpy(&p_after[0], &p_before[0], sizeof(double)*Np);
-			initial = before;
-		}
-		else if(before > initial and after < initial) 
-		{
-			std::memcpy(&p[0], &p_after[0], sizeof(double)*Np);
-			std::memcpy(&p_before[0], &p_after[0], sizeof(double)*Np);
 			lambda /= nu;
 			initial = after;
-		}
-		else if(before < initial and after < initial) 
-		{
-			if(before > after) 
+			for(int ip=0;ip<Np;++ip)
+				dp[ip] = p[ip] - p_after[ip];
+			if(std::sqrt(ddot_(&Np, &dp[0], &INC, &dp[0], &INC)) < Tol)
 			{
 				std::memcpy(&p[0], &p_after[0], sizeof(double)*Np);
-				std::memcpy(&p_before[0], &p_after[0], sizeof(double)*Np);
-				lambda /= nu;
-				initial = after;
+				std::cout<<"converge!";
+				break;
 			}
-			else 
+			else
+				std::memcpy(&p[0], &p_after[0], sizeof(double)*Np);
+		}
+		else
+		{
+			initial = before;
+			for(int ip=0;ip<Np;++ip)
+				dp[ip] = p[ip] - p_before[ip];
+			if(std::sqrt(ddot_(&Np, &dp[0], &INC, &dp[0], &INC)) < Tol)
 			{
 				std::memcpy(&p[0], &p_before[0], sizeof(double)*Np);
-				std::memcpy(&p_after[0], &p_before[0], sizeof(double)*Np);
-				initial = before;
+				std::cout<<"converge!";
+				break;
 			}
+			else
+				std::memcpy(&p[0], &p_before[0], sizeof(double)*Np);
 		}
 	}
 
 	std::memcpy(parameter, &p[0], sizeof(double)*Np);
 
-	std::cout<<"(iter:"<<iter<<", cost:"<<initial<<", grad norm:"<<gradNorm<<")"<<std::endl;
+	std::cout<<"(iter:"<<iter<<", cost:"<<initial<<")"<<std::endl;
 
 	for(int i=0;i<Np;i++) 
 		std::cout<<"p["<<i<<"]="<<p[i]<<" ";
