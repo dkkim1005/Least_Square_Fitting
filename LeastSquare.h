@@ -248,7 +248,7 @@ void loadtxt(const char fileName[], const int numDimX,
 }
 
 template<typename Tx, typename Ty>
-void useDeffJacobian(const BaseModel<Tx,Ty>* model, const double* parameter, double* J, 
+void useDiffJacobian(const BaseModel<Tx,Ty>* model, const double* parameter, double* J, 
 	const int NumDomain, const int NumParameter, const double h = 1e-5)
 {
 	std::vector<double> p_pdh(NumParameter);
