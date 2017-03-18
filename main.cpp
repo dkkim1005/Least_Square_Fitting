@@ -38,7 +38,7 @@ public:
 };
 
 
-// case 1. multi-linear fitting
+// case 2. multi-linear fitting
 template <typename Tx = double, typename Ty = double> 
 class MultiLinearModel : public LeastSquare::BaseModel<Tx,Ty>
 {
