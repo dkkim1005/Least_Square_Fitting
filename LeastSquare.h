@@ -6,6 +6,34 @@
 #include <cassert>
 #include <fstream>
 
+// Ref : https://github.com/gon1332/fort320/blob/master/include/Utils/colors.h
+#ifndef _COLORS_
+#define _COLORS_
+
+/* FOREGROUND */
+#define RST  "\x1B[0m"
+#define KRED  "\x1B[31m"
+#define KGRN  "\x1B[32m"
+#define KYEL  "\x1B[33m"
+#define KBLU  "\x1B[34m"
+#define KMAG  "\x1B[35m"
+#define KCYN  "\x1B[36m"
+#define KWHT  "\x1B[37m"
+
+#define FRED(x) KRED x RST
+#define FGRN(x) KGRN x RST
+#define FYEL(x) KYEL x RST
+#define FBLU(x) KBLU x RST
+#define FMAG(x) KMAG x RST
+#define FCYN(x) KCYN x RST
+#define FWHT(x) KWHT x RST
+
+#define BOLD(x) "\x1B[1m" x RST
+#define UNDL(x) "\x1B[4m" x RST
+
+#endif  /* _COLORS_ */
+
+
 #ifndef LEAST_SQUARE_FITTING
 #define LEAST_SQUARE_FITTING
 
@@ -82,12 +110,11 @@ inline void invSymMatrix(const int N, const double* A, double* inv_A, const char
 
 		std::memcpy(inv_A, A, sizeof(double)*N*N);
 
-		// DGETRF(1)
 		dgetrf_(&N, &N, inv_A, &N, &IPIV[0], &INFO);
 
 		if(INFO != 0)
 		{
-			std::cout<<"ERROR IN DGETRF(1)"<<std::endl;
+			std::cout<<FRED(BOLD("ERROR IN DGETRF"))<<std::endl;
 			std::abort();
 		}
 
@@ -102,7 +129,7 @@ inline void invSymMatrix(const int N, const double* A, double* inv_A, const char
 
 		if(INFO != 0)
 		{
-			std::cout<<"ERROR IN DGETRI"<<std::endl;
+			std::cout<<FRED(BOLD("ERROR IN DGETRI"))<<std::endl;
 			std::abort();
 		}
 	}
@@ -146,7 +173,7 @@ public:
 				result = NumParameter;
 				break;
 			default:
-				std::cout<<"error! check your arguments"<<std::endl;
+				std::cout<<FRED(BOLD("error! check your arguments"))<<std::endl;
 				std::abort();
 		}
 
@@ -157,7 +184,7 @@ public:
 	{
 		double accum = 0;
 		for(int i=0;i<NumDomain;++i)
-			accum += std::pow(yi[i] - modelFunc(parameter, i),2);
+			accum += std::abs(yi[i] - modelFunc(parameter, i));
 		return accum;
 	}
 
@@ -221,7 +248,7 @@ void loadtxt(const char fileName[], const int numDimX,
 }
 
 template<typename Tx, typename Ty>
-void useDiffJacobian(const BaseModel<Tx,Ty>* model, const double* parameter, double* J, 
+void useDeffJacobian(const BaseModel<Tx,Ty>* model, const double* parameter, double* J, 
 	const int NumDomain, const int NumParameter, const double h = 1e-5)
 {
 	std::vector<double> p_pdh(NumParameter);
@@ -236,7 +263,7 @@ void useDiffJacobian(const BaseModel<Tx,Ty>* model, const double* parameter, dou
 			p_pdh[j] += h;
 			p_mdh[j] -= h;
 
-			J[i*NumParameter + j] = (model -> modelFunc(&p_pdh[0], i) - model -> modelFunc(&p_mdh[0], i))/(2.*h);
+			J[i*NumParameter + j] = (model -> modelFunc(&p_pdh[0],i) - model -> modelFunc(&p_mdh[0],i))/(2.*h);
 
 			p_pdh[j] -= h;
 			p_mdh[j] += h;
@@ -267,6 +294,8 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 	while(iter < Iter)
 	{
 		iter += 1;
+	
+		//std::cout<<"(iter:"<<iter<<", cost:"<<initial<<")"<<std::endl;
 
 		model -> get_jacobian(&p[0] ,&Jacobian[0]);
 
@@ -306,7 +335,7 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 			lambda *= nu;
 			if(lambda > 1e30)
 			{
-				std::cout<<"lambda is too big!";
+				std::cout<<BOLD("lambda is too big!");
 				break;
 			}
 		}
@@ -319,7 +348,7 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 			if(std::sqrt(ddot_(&Np, &dp[0], &INC, &dp[0], &INC)) < Tol)
 			{
 				std::memcpy(&p[0], &p_after[0], sizeof(double)*Np);
-				std::cout<<"converge!";
+				std::cout<<FGRN(BOLD("converge!"));
 				break;
 			}
 			else
@@ -333,7 +362,7 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 			if(std::sqrt(ddot_(&Np, &dp[0], &INC, &dp[0], &INC)) < Tol)
 			{
 				std::memcpy(&p[0], &p_before[0], sizeof(double)*Np);
-				std::cout<<"converge!";
+				std::cout<<FGRN(BOLD("converge!"));
 				break;
 			}
 			else
@@ -346,7 +375,7 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 	std::cout<<"(iter:"<<iter<<", cost:"<<initial<<")"<<std::endl;
 
 	for(int i=0;i<Np;i++) 
-		std::cout<<"p["<<i<<"]="<<p[i]<<" ";
+		std::cout<<FCYN("p[")<<i<<FCYN("] = ")<<p[i]<<"  ";
 	std::cout<<std::endl;
 }
 
