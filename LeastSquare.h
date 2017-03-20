@@ -6,6 +6,9 @@
 #include <cassert>
 #include <fstream>
 
+#ifndef LEAST_SQUARE_FITTING
+#define LEAST_SQUARE_FITTING
+
 #define PRINT_RESULT
 
 // Ref : https://github.com/gon1332/fort320/blob/master/include/Utils/colors.h
@@ -35,9 +38,6 @@
 
 #endif  /* _COLORS_ */
 
-
-#ifndef LEAST_SQUARE_FITTING
-#define LEAST_SQUARE_FITTING
 
 extern "C" 
 {
