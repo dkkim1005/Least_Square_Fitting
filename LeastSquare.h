@@ -6,6 +6,8 @@
 #include <cassert>
 #include <fstream>
 
+#define PRINT_RESULT
+
 // Ref : https://github.com/gon1332/fort320/blob/master/include/Utils/colors.h
 #ifndef _COLORS_
 #define _COLORS_
@@ -202,10 +204,30 @@ public:
 		std::memcpy(yi, &v_yi[0], sizeof(Ty)*NumDomain);
 	}
 
+	virtual void get_jacobian(const double* parameter, double* J) const
+	{
+		const double h = 1e-5;
+		std::vector<double> p_pdh(NumParameter);
+		std::memcpy(&p_pdh[0], parameter, sizeof(double)*NumParameter);
+		std::vector<double> p_mdh(NumParameter);
+		std::memcpy(&p_mdh[0], parameter, sizeof(double)*NumParameter);
+
+		for(int i=0;i<NumDomain;++i)
+		{
+			for(int j=0;j<NumParameter;++j)
+			{
+				p_pdh[j] += h;
+				p_mdh[j] -= h;
+
+				J[i*NumParameter + j] = (this -> modelFunc(&p_pdh[0],i) - this -> modelFunc(&p_mdh[0],i))/(2.*h);
+
+				p_pdh[j] -= h;
+				p_mdh[j] += h;
+			}
+		}
+	}
+
 	virtual double modelFunc(const double* parameter, const int Index) const = 0;
-
-	virtual void get_jacobian(const double* parameter, double* jacobian) const = 0;
-
 
 protected:
 	const int NumDomain;
@@ -245,30 +267,6 @@ void loadtxt(const char fileName[], const int numDimX,
 	yi_.swap(yi);
 
 	file.close();
-}
-
-template<typename Tx, typename Ty>
-void useDiffJacobian(const BaseModel<Tx,Ty>* model, const double* parameter, double* J, 
-	const int NumDomain, const int NumParameter, const double h = 1e-5)
-{
-	std::vector<double> p_pdh(NumParameter);
-	std::memcpy(&p_pdh[0], parameter, sizeof(double)*NumParameter);
-	std::vector<double> p_mdh(NumParameter);
-	std::memcpy(&p_mdh[0], parameter, sizeof(double)*NumParameter);
-
-	for(int i=0;i<NumDomain;++i)
-	{
-		for(int j=0;j<NumParameter;++j)
-		{
-			p_pdh[j] += h;
-			p_mdh[j] -= h;
-
-			J[i*NumParameter + j] = (model -> modelFunc(&p_pdh[0],i) - model -> modelFunc(&p_mdh[0],i))/(2.*h);
-
-			p_pdh[j] -= h;
-			p_mdh[j] += h;
-		}
-	}
 }
 
 
@@ -335,7 +333,9 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 			lambda *= nu;
 			if(lambda > 1e30)
 			{
+#ifdef PRINT_RESULT
 				std::cout<<BOLD("lambda is too big!");
+#endif
 				break;
 			}
 		}
@@ -348,7 +348,10 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 			if(std::sqrt(ddot_(&Np, &dp[0], &INC, &dp[0], &INC)) < Tol)
 			{
 				std::memcpy(&p[0], &p_after[0], sizeof(double)*Np);
+#ifdef PRINT_RESULT
 				std::cout<<FGRN(BOLD("converge!"));
+#endif
+
 				break;
 			}
 			else
@@ -362,7 +365,9 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 			if(std::sqrt(ddot_(&Np, &dp[0], &INC, &dp[0], &INC)) < Tol)
 			{
 				std::memcpy(&p[0], &p_before[0], sizeof(double)*Np);
+#ifdef PRINT_RESULT
 				std::cout<<FGRN(BOLD("converge!"));
+#endif
 				break;
 			}
 			else
@@ -372,11 +377,13 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 
 	std::memcpy(parameter, &p[0], sizeof(double)*Np);
 
+#ifdef PRINT_RESULT
 	std::cout<<"(iter:"<<iter<<", cost:"<<initial<<")"<<std::endl;
 
 	for(int i=0;i<Np;i++) 
 		std::cout<<FCYN("p[")<<i<<FCYN("] = ")<<p[i]<<"  ";
 	std::cout<<std::endl;
+#endif
 }
 
 } // namespace LeastSquare
