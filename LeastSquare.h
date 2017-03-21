@@ -42,14 +42,6 @@
 extern "C" 
 {
 	// BLAS subroutine
-	void dcopy_(const int* N, const double* x, const int* incx, double* y, const int* incy);
-
-	void dscal_(const int* N, const double* ALPHA, double* x, const int* INC);
-
-	void dsyrk_(const char* UPLO, const char* TRANS, const int* N, const int* K, 
-		const double* ALPHA, const double* A, const int* LDA, const double* BETA,
-		double* C, const int* LDC);
-
 	void dgemv_(const char* TRANS, const int* M, const int* N, const double* ALPHA, const double* A,
 		const int* LDA, const double* X, const int* INCX, const double* BETA, double* Y,
 		const int* INCY); 
@@ -60,9 +52,6 @@ extern "C"
 		const int* k, const double* alpha, const double* a, const int* lda, 
 		const double* b, const int* ldb, const double* beta, double* c, const int* ldc);
 
-	void dsymv_(const char*, const int*, const double* ALPHA, const double* A,
-		const int*, const double* X, const int*, const double* BETA,
-		double* Y,const int* );
 
 	// LAPACK subroutine
 	void dgetrf_(const int* M, const int* N, const double* A, const int* LDA, 
