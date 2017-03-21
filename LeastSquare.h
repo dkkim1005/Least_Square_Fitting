@@ -5,6 +5,7 @@
 #include <cstdlib>
 #include <cassert>
 #include <fstream>
+#include <functional>
 
 #ifndef LEAST_SQUARE_FITTING
 #define LEAST_SQUARE_FITTING
@@ -131,7 +132,7 @@ inline void invSymMatrix(const int N, const double* A, double* inv_A, const char
 namespace LeastSquare
 {
 
-template <typename Tx, typename Ty>
+template <typename Tx>
 class BaseModel
 {
 public:
@@ -142,7 +143,7 @@ public:
 		assert(NumParameter > 0);
 		assert(NumDimension > 0);
 		xi = new Tx [NumDomain * NumDimension];
-		yi = new Ty [NumDomain];
+		yi = new double [NumDomain];
 	}
 
 	virtual ~BaseModel()
@@ -184,13 +185,13 @@ public:
 		return yi[Index] - modelFunc(parameter, Index);
 	}
 
-	virtual void inData(const std::vector<Tx>& v_xi, const std::vector<Ty>& v_yi)
+	virtual void inData(const std::vector<Tx>& v_xi, const std::vector<double>& v_yi)
 	{
 		assert(v_xi.size() == NumDomain*NumDimension);
 		assert(v_yi.size() == NumDomain);
 
 		std::memcpy(xi, &v_xi[0], sizeof(Tx)*NumDomain*NumDimension);
-		std::memcpy(yi, &v_yi[0], sizeof(Ty)*NumDomain);
+		std::memcpy(yi, &v_yi[0], sizeof(double)*NumDomain);
 	}
 
 	virtual void get_jacobian(const double* parameter, double* J) const
@@ -223,7 +224,37 @@ protected:
 	const int NumParameter;
 	const int NumDimension;
 	Tx* xi = nullptr;
-	Ty* yi = nullptr;
+	double* yi = nullptr;
+};
+
+
+template <typename Tx = double>
+class FunctionalModel : public BaseModel<Tx>
+{
+        using BaseModel<Tx>::xi;
+        using LeastSquare::BaseModel<Tx>::NumDimension;
+
+public:
+	FunctionalModel(const std::function<double(const double*, const Tx*)> model_f_,
+	const int NumDomain_, const int NumParameter_, const int NumDimension_ = 1)
+	: BaseModel<Tx>(NumDomain_, NumParameter_, NumDimension_), model_f(model_f_),
+	_xi_copy(new Tx [NumDimension_])
+	{}
+
+	~FunctionalModel()
+	{
+		if(_xi_copy != nullptr) delete [] _xi_copy;
+	}
+
+	virtual double modelFunc(const double* parameter, const int Index) const
+	{
+		std::memcpy(_xi_copy, &xi[NumDimension*Index], sizeof(Tx)*NumDimension);
+		return model_f(parameter, _xi_copy);
+	}
+
+private:
+	Tx* _xi_copy = nullptr;
+	std::function<double(const double*, const Tx*)> model_f;
 };
 
 
@@ -259,14 +290,14 @@ void loadtxt(const char fileName[], const int numDimX,
 }
 
 
-template<typename Tx, typename Ty>
-void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const int Iter = (int)1e4, const double Tol = 1e-4)
+template<typename Tx>
+void Levenberg_Marquardt(const BaseModel<Tx>& model, double* parameter, const int Iter = (int)1e4, const double Tol = 1e-4)
 {
 	const char TRANS = 'N', CMODE = 'T';
 	const double ALPHA = 1., BETA = 0, nu = 2.;
 	const int INC = 1, 
-		   Np = model -> getData(BaseModel<Tx,Ty>::dataList::num_parameter),
-		   Nd = model -> getData(BaseModel<Tx,Ty>::dataList::num_domain); 
+		   Np = model.getData(BaseModel<Tx>::dataList::num_parameter),
+		   Nd = model.getData(BaseModel<Tx>::dataList::num_domain); 
 	double lambda = 1., before = 0, after = 0, initial = 0;
 	int iter = 0;
 	std::vector<double> p(Np), dp(Np), r_array(Nd), Jacobian(Nd*Np), JT_J(Np*Np),
@@ -276,7 +307,7 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 
 	std::memcpy(&p[0], parameter, sizeof(double)*Np);
 
-	initial = model -> cost(&p[0]);
+	initial = model.cost(&p[0]);
 
 	while(iter < Iter)
 	{
@@ -284,12 +315,12 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 	
 		//std::cout<<"(iter:"<<iter<<", cost:"<<initial<<")"<<std::endl;
 
-		model -> get_jacobian(&p[0] ,&Jacobian[0]);
+		model.get_jacobian(&p[0] ,&Jacobian[0]);
 
         	dgemm_(&TRANS, &CMODE, &Np, &Np, &Nd, &ALPHA, &Jacobian[0], &Np, 
 		&Jacobian[0], &Np, &BETA, &JT_J[0], &Np);
 
-		for(int i=0;i<Nd;i++) r_array[i] = model -> yDelFunc(&p[0], i);
+		for(int i=0;i<Nd;i++) r_array[i] = model.yDelFunc(&p[0], i);
 
 		std::memcpy(&lhs[0], &JT_J[0], sizeof(double)*Np*Np);
 		for(int i=0;i<Np;++i) lhs[i*Np + i] = JT_J[i*Np + i]*(1. + lambda);
@@ -303,7 +334,7 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 
 		for(int i=0;i<Np;++i)
 			p_before[i] = p[i] + i_lhs_rhs[i];
-		before = model -> cost(&p_before[0]);
+		before = model.cost(&p_before[0]);
 
 		for(int i=0;i<Np;++i) lhs[i*Np + i] = JT_J[i*Np + i]*(1 + lambda/nu);
 
@@ -314,7 +345,7 @@ void Levenberg_Marquardt(const BaseModel<Tx,Ty>* model, double* parameter, const
 
 		for(int i=0;i<Np;++i)
 			p_after[i] = p[i] + i_lhs_rhs[i];
-		after = model -> cost(&p_after[0]);
+		after = model.cost(&p_after[0]);
 
 
 		if(before >= initial and after >= initial)

@@ -3,18 +3,17 @@
 #include "LeastSquare.h"
 
 // case 1. sine fitting
-template <typename Tx = double, typename Ty = double> 
-class SineModel : public LeastSquare::BaseModel<Tx,Ty>
+template <typename Tx = double> 
+class SineModel : public LeastSquare::BaseModel<Tx>
 {
-        using LeastSquare::BaseModel<Tx,Ty>::NumDomain;
-        using LeastSquare::BaseModel<Tx,Ty>::NumParameter;
-        using LeastSquare::BaseModel<Tx,Ty>::NumDimension;
-        using LeastSquare::BaseModel<Tx,Ty>::xi;
-        using LeastSquare::BaseModel<Tx,Ty>::yi;
+        using LeastSquare::BaseModel<Tx>::NumDomain;
+        using LeastSquare::BaseModel<Tx>::NumParameter;
+        using LeastSquare::BaseModel<Tx>::NumDimension;
+        using LeastSquare::BaseModel<Tx>::xi;
 
 public:
         explicit SineModel(const int NumDomain_)
-        : LeastSquare::BaseModel<Tx,Ty>(NumDomain_, 4)
+        : LeastSquare::BaseModel<Tx>(NumDomain_, 4)
         {}
 
 	virtual double modelFunc(const double* parameter, const int Index) const
@@ -38,18 +37,17 @@ public:
 
 
 // case 2. multi-linear fitting
-template <typename Tx = double, typename Ty = double> 
-class MultiLinearModel : public LeastSquare::BaseModel<Tx,Ty>
+template <typename Tx = double> 
+class MultiLinearModel : public LeastSquare::BaseModel<Tx>
 {
-        using LeastSquare::BaseModel<Tx,Ty>::NumDomain;
-        using LeastSquare::BaseModel<Tx,Ty>::NumParameter;
-        using LeastSquare::BaseModel<Tx,Ty>::NumDimension;
-        using LeastSquare::BaseModel<Tx,Ty>::xi;
-        using LeastSquare::BaseModel<Tx,Ty>::yi;
+        using LeastSquare::BaseModel<Tx>::NumDomain;
+        using LeastSquare::BaseModel<Tx>::NumParameter;
+        using LeastSquare::BaseModel<Tx>::NumDimension;
+        using LeastSquare::BaseModel<Tx>::xi;
 
 public:
         explicit MultiLinearModel(const int NumDomain_)
-        : LeastSquare::BaseModel<Tx,Ty>(NumDomain_, 4, 3)
+        : LeastSquare::BaseModel<Tx>(NumDomain_, 4, 3)
         {}
 
 	virtual double modelFunc(const double* parameter, const int Index) const
@@ -72,19 +70,43 @@ public:
 };
 
 
-// case 3. non-linear fitting
-template <typename Tx = double, typename Ty = double> 
-class ExponentialModel : public LeastSquare::BaseModel<Tx,Ty>
+template <typename Tx = double> 
+class multivariable : public LeastSquare::BaseModel<Tx>
 {
-        using LeastSquare::BaseModel<Tx,Ty>::NumDomain;
-        using LeastSquare::BaseModel<Tx,Ty>::NumParameter;
-        using LeastSquare::BaseModel<Tx,Ty>::NumDimension;
-        using LeastSquare::BaseModel<Tx,Ty>::xi;
-        using LeastSquare::BaseModel<Tx,Ty>::yi;
+        using LeastSquare::BaseModel<Tx>::NumDomain;
+        using LeastSquare::BaseModel<Tx>::NumParameter;
+        using LeastSquare::BaseModel<Tx>::NumDimension;
+        using LeastSquare::BaseModel<Tx>::xi;
+
+public:
+        explicit multivariable(const int NumDomain_, const int NumDimension_)
+        : LeastSquare::BaseModel<Tx>(NumDomain_, NumDimension_ + 1, NumDimension_)
+        {}
+
+	virtual double modelFunc(const double* p, const int Index) const
+	{
+		double accum = 0;
+		for(int i=1;i<NumParameter;++i)
+			accum += p[i]*xi[NumDimension*Index+i-1];
+		accum += p[0];
+		return accum;
+	}
+};
+
+
+
+// case 3. non-linear fitting
+template <typename Tx = double> 
+class ExponentialModel : public LeastSquare::BaseModel<Tx>
+{
+        using LeastSquare::BaseModel<Tx>::NumDomain;
+        using LeastSquare::BaseModel<Tx>::NumParameter;
+        using LeastSquare::BaseModel<Tx>::NumDimension;
+        using LeastSquare::BaseModel<Tx>::xi;
 
 public:
         explicit ExponentialModel(const int NumDomain_)
-        : LeastSquare::BaseModel<Tx,Ty>(NumDomain_, 4, 3)
+        : LeastSquare::BaseModel<Tx>(NumDomain_, 4, 3)
         {}
 
 	virtual double modelFunc(const double* parameter, const int Index) const
@@ -99,54 +121,52 @@ public:
 
 int main(int argc, char* argv[])
 {
-
-	typedef LeastSquare::BaseModel<double,double> baseModel;
+	typedef LeastSquare::BaseModel<double> baseModel;
 	const int NumDomain = 20;
-	const int NumParameter = 4;
+	const int NumDimension = 60;
 
 	std::vector<double> x;
 	std::vector<double> y;
 	baseModel* model;
-	double parameter[NumParameter] = {10,4,1,1};
 
-	LeastSquare::loadtxt("input1.dat", 1, x, y);
+	double parameter[NumDimension+1];
+	for(auto & p : parameter) p = 1.;
 
-	model = new SineModel<>(y.size());
-	model -> inData(x, y);
+	LeastSquare::loadtxt("input3.dat", NumDimension, x, y);
 
-	std::cout<<"init cost(sine):"<<model -> cost(parameter)<<std::endl;
+	multivariable<> model1(y.size(), NumDimension);
+	model1.inData(x, y);
 
-	LeastSquare::Levenberg_Marquardt(model, parameter, (int)1e4, 1e-15);
-	delete model;
+	std::cout<<"init cost(linear):"<<model1.cost(parameter)<<std::endl;
 
-	LeastSquare::loadtxt("input2.dat", 3, x, y);
-	model = new MultiLinearModel<>(y.size());
-	model -> inData(x, y);
+	LeastSquare::Levenberg_Marquardt(model1, parameter, (int)1e4, 1e-10);
 
-	std::cout<<"init cost(linear):"<<model -> cost(parameter)<<std::endl;
 
-	LeastSquare::Levenberg_Marquardt(model, parameter, (int)1e4, 1e-15);
-	delete model;
+	LeastSquare::loadtxt("input.dat", 1, x, y);
 
-	LeastSquare::loadtxt("input.dat", 3, x, y);
-	model = new ExponentialModel<>(y.size());
-	model -> inData(x, y);
+	double p[4] = {1, 4, 10, -3};
 
-	std::cout<<"init cost(exp):"<<model -> cost(parameter)<<std::endl;
+        SineModel<> model2(y.size());
 
-	LeastSquare::Levenberg_Marquardt(model, parameter, (int)1e4, 1e-10);
+	model2.inData(x, y);
 
-	delete model;
+	std::cout<<"init cost(linear):"<<model2.cost(parameter)<<std::endl;
 
-	model = new MultiLinearModel<>(y.size());
-	LeastSquare::loadtxt("input.dat", 3, x, y);
-	model -> inData(x, y);
+	LeastSquare::Levenberg_Marquardt(model2, p, (int)1e4, 1e-10);
 
-	std::cout<<"init cost(linear):"<<model -> cost(parameter)<<std::endl;
 
-	LeastSquare::Levenberg_Marquardt(model, parameter, (int)1e4, 1e-10);
+	p[0] = 1; p[1] = 4; p[2] = 10; p[3] = -3;
 
-	delete model;
+	auto func = [](const double* p, const double* x) -> double
+			{
+				return p[0]*std::sin(p[1]*x[0] + p[2]) + p[3];
+			};
+
+	LeastSquare::FunctionalModel<> model3(func, y.size(), 4);
+
+	model3.inData(x, y);
+
+	LeastSquare::Levenberg_Marquardt(model3, p, (int)1e4, 1e-10);
 
 	return 0;
 }
