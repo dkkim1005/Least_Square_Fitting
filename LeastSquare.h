@@ -6,6 +6,7 @@
 #include <cassert>
 #include <fstream>
 #include <functional>
+#include <complex>
 
 #ifndef LEAST_SQUARE_FITTING
 #define LEAST_SQUARE_FITTING
@@ -66,10 +67,11 @@ extern "C"
 namespace lapack
 {
 
-inline void invSymMatrix(const int N, const double* A, double* inv_A, const char UPLO='U')
+inline void inverse_matrix(const int N, const double* A, double* inv_A)
 {
-	if(N == 1)
+	if(N == 1) {
 		inv_A[0] = 1./A[0];
+	}
 	else if(N == 2)
 	{
 		const double det = A[0]*A[3] - A[1]*A[2];
@@ -132,66 +134,58 @@ inline void invSymMatrix(const int N, const double* A, double* inv_A, const char
 namespace LeastSquare
 {
 
-template <typename Tx>
-class BaseModel
+class BaseModelReal
 {
 public:
-	BaseModel(const int NumDomain_, const int NumParameter_, const int NumDimension_ = 1)
-	: NumDomain(NumDomain_), NumParameter(NumParameter_), NumDimension(NumDimension_) 
+	BaseModelReal(const int NumSample_, const int NumParameter_, const int NumDimension_ = 1)
+	: NumSample(NumSample_), NumParameter(NumParameter_), NumDimension(NumDimension_) 
 	{
-		assert(NumDomain > 0);
+		assert(NumSample > 0);
 		assert(NumParameter > 0);
 		assert(NumDimension > 0);
-		xi = new Tx [NumDomain * NumDimension];
-		yi = new double [NumDomain];
+		xi = new double [NumSample * NumDimension];
+		yi = new double [NumSample];
 	}
 
-	virtual ~BaseModel()
+	virtual ~BaseModelReal()
 	{
-		if(xi != nullptr) delete [] xi;
-		if(yi != nullptr) delete [] yi;
+		if(xi != nullptr) { delete [] xi; }
+		if(yi != nullptr) { delete [] yi; }
 	}
 
-	enum dataList{ num_domain, num_parameter};
-	int getData(const dataList Data) const
+	// Methods to call in the LeastSquare::Levenberg_Marquardt function.
+	int get_num_parameter() const
 	{
-		int result;
-		switch(Data)
-		{
-			case num_domain:
-				result = NumDomain;
-				break;
-			case num_parameter:
-				result = NumParameter;
-				break;
-			default:
-				std::cout<<FRED(BOLD("error! check your arguments"))<<std::endl;
-				std::abort();
-		}
+		return NumParameter;
+	}
 
-		return result;
+	int get_num_sample() const
+	{
+		return NumSample;
 	}
 
 	double cost(const double* parameter) const
 	{
 		double accum = 0;
-		for(int i=0;i<NumDomain;++i)
-			accum += std::abs(yi[i] - modelFunc(parameter, i));
+		for(int i=0;i<NumSample;++i) {
+			accum += std::abs(yi[i] - model_func(parameter, i));
+		}
 		return accum;
 	}
 
-	double yDelFunc(const double* parameter, const int Index) const
+	double y_del_func(const double* parameter, const int Index) const
 	{
-		return yi[Index] - modelFunc(parameter, Index);
+		return yi[Index] - model_func(parameter, Index);
 	}
+	// ----------------------------------------------------------------
 
-	virtual void inData(const std::vector<Tx>& v_xi, const std::vector<double>& v_yi)
+	virtual void in_data(const std::vector<double>& v_xi, const std::vector<double>& v_yi)
 	{
-		assert(v_xi.size() == NumDomain*NumDimension);
-		assert(v_yi.size() == NumDomain);
+		assert(v_xi.size() == NumSample*NumDimension);
+		assert(v_yi.size() == NumSample);
 
-		std::memcpy(xi, &v_xi[0], sizeof(Tx)*NumDomain*NumDimension);
-		std::memcpy(yi, &v_yi[0], sizeof(double)*NumDomain);
+		std::memcpy(xi, &v_xi[0], sizeof(double)*NumSample*NumDimension);
+		std::memcpy(yi, &v_yi[0], sizeof(double)*NumSample);
 	}
 
 	virtual void get_jacobian(const double* parameter, double* J) const
@@ -202,14 +196,14 @@ public:
 		std::vector<double> p_mdh(NumParameter);
 		std::memcpy(&p_mdh[0], parameter, sizeof(double)*NumParameter);
 
-		for(int i=0;i<NumDomain;++i)
+		for(int i=0;i<NumSample;++i)
 		{
 			for(int j=0;j<NumParameter;++j)
 			{
 				p_pdh[j] += h;
 				p_mdh[j] -= h;
 
-				J[i*NumParameter + j] = (this -> modelFunc(&p_pdh[0],i) - this -> modelFunc(&p_mdh[0],i))/(2.*h);
+				J[i*NumParameter + j] = (this -> model_func(&p_pdh[0],i) - this -> model_func(&p_mdh[0],i))/(2.*h);
 
 				p_pdh[j] -= h;
 				p_mdh[j] += h;
@@ -217,44 +211,190 @@ public:
 		}
 	}
 
-	virtual double modelFunc(const double* parameter, const int Index) const = 0;
+	virtual double model_func(const double* parameter, const int Index) const = 0;
 
 protected:
-	const int NumDomain;
+	const int NumSample;
 	const int NumParameter;
 	const int NumDimension;
-	Tx* xi = nullptr;
+	double* xi = nullptr;
 	double* yi = nullptr;
 };
 
 
-template <typename Tx = double>
-class FunctionalModel : public BaseModel<Tx>
+
+typedef std::complex<double> dcomplex;
+
+
+class BaseModelComplex
 {
-        using BaseModel<Tx>::xi;
-        using LeastSquare::BaseModel<Tx>::NumDimension;
-
 public:
-	FunctionalModel(const std::function<double(const double*, const Tx*)> model_f_,
-	const int NumDomain_, const int NumParameter_, const int NumDimension_ = 1)
-	: BaseModel<Tx>(NumDomain_, NumParameter_, NumDimension_), model_f(model_f_),
-	_xi_copy(new Tx [NumDimension_])
-	{}
-
-	~FunctionalModel()
+	BaseModelComplex(const int NumSample_, const int NumParameter_, const int NumDimension_ = 1)
+	: NumSample(NumSample_), TotNumSample(2*NumSample_), NumParameter(NumParameter_), NumDimension(NumDimension_) 
 	{
-		if(_xi_copy != nullptr) delete [] _xi_copy;
+		assert(NumSample > 0);
+		assert(NumParameter > 0);
+		assert(NumDimension > 0);
+
+		xi = new dcomplex [NumSample * NumDimension];
+		yi = new dcomplex [NumSample];
 	}
 
-	virtual double modelFunc(const double* parameter, const int Index) const
+	~BaseModelComplex()
 	{
-		std::memcpy(_xi_copy, &xi[NumDimension*Index], sizeof(Tx)*NumDimension);
+		if(xi != nullptr) { delete [] xi; }
+		if(yi != nullptr) { delete [] yi; }
+	}
+
+	int get_num_parameter() const
+	{
+		return NumParameter;
+	}
+
+	int get_num_sample() const
+	{
+		return TotNumSample;
+	}
+
+	double cost(const double* parameter) const
+	{
+		double accum = 0;
+		for(int i=0; i<NumSample; ++i) {
+			accum += std::norm(yi[i] - model_func(parameter, i));
+		}
+		return accum;
+	}
+
+	double y_del_func(const double* parameter, const int Index) const
+	{
+		const int IDX = Index % NumSample;
+		dcomplex ymf = yi[IDX] - model_func(parameter, IDX);
+
+		double result = 0;
+
+		if(Index < NumSample) {
+			result = ymf.real();	
+		}
+		else {
+			result = ymf.imag();	
+		}
+
+		return result;
+	}
+
+	virtual void in_data(const std::vector<dcomplex>& v_xi, const std::vector<dcomplex>& v_yi)
+	{
+		assert(v_xi.size() == NumSample*NumDimension);
+		assert(v_yi.size() == NumSample);
+
+		std::memcpy(xi, &v_xi[0], sizeof(dcomplex)*NumSample*NumDimension);
+		std::memcpy(yi, &v_yi[0], sizeof(dcomplex)*NumSample);
+	}
+
+	virtual void get_jacobian(const double* parameter, double* J) const
+	{
+		const double h = 1e-5;
+		std::vector<double> p_pdh(NumParameter);
+		std::memcpy(&p_pdh[0], parameter, sizeof(double)*NumParameter);
+		std::vector<double> p_mdh(NumParameter);
+		std::memcpy(&p_mdh[0], parameter, sizeof(double)*NumParameter);
+
+		// real part
+		for(int i=0;i<NumSample;++i)
+		{
+			for(int j=0;j<NumParameter;++j)
+			{
+				p_pdh[j] += h;
+				p_mdh[j] -= h;
+
+				J[i*NumParameter + j] = (this -> model_func(&p_pdh[0],i).real() 
+							- this -> model_func(&p_mdh[0],i).real())/(2.*h);
+
+				p_pdh[j] -= h;
+				p_mdh[j] += h;
+			}
+		}
+
+		// imag part
+		for(int i=NumSample; i<TotNumSample; ++i)
+		{
+			for(int j=0;j<NumParameter;++j)
+			{
+				p_pdh[j] += h;
+				p_mdh[j] -= h;
+
+				J[i*NumParameter + j] = (this -> model_func(&p_pdh[0], i-NumSample).imag() 
+							- this -> model_func(&p_mdh[0],i-NumSample).imag())/(2.*h);
+
+				p_pdh[j] -= h;
+				p_mdh[j] += h;
+			}
+		}
+	}
+
+	virtual dcomplex model_func(const double* parameter, const int Index) const = 0;
+
+protected:
+	const int NumSample;
+	const int TotNumSample;
+	const int NumParameter;
+	const int NumDimension;
+
+	dcomplex* xi = nullptr;
+	dcomplex* yi = nullptr;
+};
+
+
+
+class FunctionalModelReal : public BaseModelReal
+{
+public:
+	FunctionalModelReal(const std::function<double(const double*, const double*)> model_f_,
+	const int NumSample_, const int NumParameter_, const int NumDimension_ = 1)
+	: BaseModelReal(NumSample_, NumParameter_, NumDimension_), model_f(model_f_),
+	_xi_copy(new double [NumDimension_])
+	{}
+
+	~FunctionalModelReal()
+	{
+		if(_xi_copy != nullptr) { delete [] _xi_copy; }
+	}
+
+	virtual double model_func(const double* parameter, const int Index) const
+	{
+		std::memcpy(_xi_copy, &xi[NumDimension*Index], sizeof(double)*NumDimension);
 		return model_f(parameter, _xi_copy);
 	}
 
 private:
-	Tx* _xi_copy = nullptr;
-	std::function<double(const double*, const Tx*)> model_f;
+	double* _xi_copy = nullptr;
+	std::function<double(const double*, const double*)> model_f;
+};
+
+
+class FunctionalModelComplex : public BaseModelComplex
+{
+public:
+	FunctionalModelComplex(const std::function<dcomplex(const double*, const dcomplex*)> model_f_,
+	const int NumSample_, const int NumParameter_, const int NumDimension_ = 1)
+	: BaseModelComplex(NumSample_, NumParameter_, NumDimension_), model_f(model_f_),
+	_xi_copy(new dcomplex [NumDimension_])
+	{}
+
+	~FunctionalModelComplex()
+	{
+		if(_xi_copy != nullptr) { delete [] _xi_copy; }
+	}
+
+	virtual dcomplex model_func(const double* parameter, const int Index) const
+	{
+		std::memcpy(_xi_copy, &xi[NumDimension*Index], sizeof(dcomplex)*NumDimension);
+		return model_f(parameter, _xi_copy);
+	}
+
+private:
+	dcomplex* _xi_copy = nullptr;
+	std::function<dcomplex(const double*, const dcomplex*)> model_f;
 };
 
 
@@ -290,14 +430,14 @@ void loadtxt(const char fileName[], const int numDimX,
 }
 
 
-template<typename Tx>
-void Levenberg_Marquardt(const BaseModel<Tx>& model, double* parameter, const int Iter = (int)1e4, const double Tol = 1e-4)
+template<typename BaseModelType>
+void Levenberg_Marquardt(const BaseModelType& model, double* parameter, const int Iter = (int)1e4, const double Tol = 1e-4)
 {
 	const char TRANS = 'N', CMODE = 'T';
 	const double ALPHA = 1., BETA = 0, nu = 2.;
 	const int INC = 1, 
-		   Np = model.getData(BaseModel<Tx>::dataList::num_parameter),
-		   Nd = model.getData(BaseModel<Tx>::dataList::num_domain); 
+		   Np = model.get_num_parameter(),
+		   Nd = model.get_num_sample();
 	double lambda = 1., before = 0, after = 0, initial = 0;
 	int iter = 0;
 	std::vector<double> p(Np), dp(Np), r_array(Nd), Jacobian(Nd*Np), JT_J(Np*Np),
@@ -320,31 +460,39 @@ void Levenberg_Marquardt(const BaseModel<Tx>& model, double* parameter, const in
         	dgemm_(&TRANS, &CMODE, &Np, &Np, &Nd, &ALPHA, &Jacobian[0], &Np, 
 		&Jacobian[0], &Np, &BETA, &JT_J[0], &Np);
 
-		for(int i=0;i<Nd;i++) r_array[i] = model.yDelFunc(&p[0], i);
+		for(int i=0;i<Nd;i++) {
+			r_array[i] = model.y_del_func(&p[0], i);
+		}
 
 		std::memcpy(&lhs[0], &JT_J[0], sizeof(double)*Np*Np);
-		for(int i=0;i<Np;++i) lhs[i*Np + i] = JT_J[i*Np + i]*(1. + lambda);
+		for(int i=0;i<Np;++i) {
+			lhs[i*Np + i] = JT_J[i*Np + i]*(1. + lambda);
+		}
 		dgemv_(&TRANS, &Np, &Nd, &ALPHA, &Jacobian[0], &Np, &r_array[0], 
 		&INC, &BETA, &rhs[0], &INC);
 		
-		lapack::invSymMatrix(Np, &lhs[0], &inv_lhs[0]);
+		lapack::inverse_matrix(Np, &lhs[0], &inv_lhs[0]);
 
 		dgemv_(&CMODE, &Np, &Np, &ALPHA, &inv_lhs[0], &Np, &rhs[0], 
 		&INC, &BETA, &i_lhs_rhs[0], &INC);
 
-		for(int i=0;i<Np;++i)
+		for(int i=0;i<Np;++i) {
 			p_before[i] = p[i] + i_lhs_rhs[i];
+		}
 		before = model.cost(&p_before[0]);
 
-		for(int i=0;i<Np;++i) lhs[i*Np + i] = JT_J[i*Np + i]*(1 + lambda/nu);
+		for(int i=0;i<Np;++i) {
+			lhs[i*Np + i] = JT_J[i*Np + i]*(1 + lambda/nu);
+		}
 
-		lapack::invSymMatrix(Np, &lhs[0], &inv_lhs[0]);
+		lapack::inverse_matrix(Np, &lhs[0], &inv_lhs[0]);
 		
 		dgemv_(&CMODE, &Np, &Np, &ALPHA, &inv_lhs[0], &Np, &rhs[0], 
 		&INC, &BETA, &i_lhs_rhs[0], &INC);
 
-		for(int i=0;i<Np;++i)
+		for(int i=0;i<Np;++i) {
 			p_after[i] = p[i] + i_lhs_rhs[i];
+		}
 		after = model.cost(&p_after[0]);
 
 
@@ -363,8 +511,9 @@ void Levenberg_Marquardt(const BaseModel<Tx>& model, double* parameter, const in
 		{
 			lambda /= nu;
 			initial = after;
-			for(int ip=0;ip<Np;++ip)
+			for(int ip=0;ip<Np;++ip) {
 				dp[ip] = p[ip] - p_after[ip];
+			}
 			if(std::sqrt(ddot_(&Np, &dp[0], &INC, &dp[0], &INC)) < Tol)
 			{
 				std::memcpy(&p[0], &p_after[0], sizeof(double)*Np);
@@ -380,8 +529,9 @@ void Levenberg_Marquardt(const BaseModel<Tx>& model, double* parameter, const in
 		else
 		{
 			initial = before;
-			for(int ip=0;ip<Np;++ip)
+			for(int ip=0;ip<Np;++ip) {
 				dp[ip] = p[ip] - p_before[ip];
+			}
 			if(std::sqrt(ddot_(&Np, &dp[0], &INC, &dp[0], &INC)) < Tol)
 			{
 				std::memcpy(&p[0], &p_before[0], sizeof(double)*Np);
@@ -400,8 +550,9 @@ void Levenberg_Marquardt(const BaseModel<Tx>& model, double* parameter, const in
 #ifdef PRINT_RESULT
 	std::cout<<"(iter:"<<iter<<", cost:"<<initial<<")"<<std::endl;
 
-	for(int i=0;i<Np;i++) 
+	for(int i=0;i<Np;i++) {
 		std::cout<<FCYN("p[")<<i<<FCYN("] = ")<<p[i]<<"  ";
+	}
 	std::cout<<std::endl;
 #endif
 }
