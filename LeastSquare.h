@@ -190,7 +190,7 @@ public:
 
 	virtual void get_jacobian(const double* parameter, double* J) const
 	{
-		const double h = 1e-5;
+		const double h = 1e-7;
 		std::vector<double> p_pdh(NumParameter);
 		std::memcpy(&p_pdh[0], parameter, sizeof(double)*NumParameter);
 		std::vector<double> p_mdh(NumParameter);
@@ -293,7 +293,7 @@ public:
 
 	virtual void get_jacobian(const double* parameter, double* J) const
 	{
-		const double h = 1e-5;
+		const double h = 1e-7;
 		std::vector<double> p_pdh(NumParameter);
 		std::memcpy(&p_pdh[0], parameter, sizeof(double)*NumParameter);
 		std::vector<double> p_mdh(NumParameter);
