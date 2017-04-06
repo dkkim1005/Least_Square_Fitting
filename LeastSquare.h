@@ -41,6 +41,9 @@
 #endif  /* _COLORS_ */
 
 
+namespace LeastSquare
+{
+
 extern "C" 
 {
 	// BLAS subroutine
@@ -131,8 +134,6 @@ inline void inverse_matrix(const int N, const double* A, double* inv_A)
 
 } // namespace lapack
 
-namespace LeastSquare
-{
 
 class BaseModelReal
 {
@@ -177,8 +178,9 @@ public:
 	{
 		return yi[Index] - model_func(parameter, Index);
 	}
-	// ----------------------------------------------------------------
+	/*--------------------------------------------------------------*/
 
+	// Customize methods for an user's purpose.
 	virtual void in_data(const std::vector<double>& v_xi, const std::vector<double>& v_yi)
 	{
 		assert(v_xi.size() == NumSample*NumDimension);
@@ -212,6 +214,7 @@ public:
 	}
 
 	virtual double model_func(const double* parameter, const int Index) const = 0;
+	/*--------------------------------------------------------------*/
 
 protected:
 	const int NumSample;
@@ -223,11 +226,13 @@ protected:
 
 
 
-typedef std::complex<double> dcomplex;
 
 
 class BaseModelComplex
 {
+
+using dcomplex = std::complex<double>;
+
 public:
 	BaseModelComplex(const int NumSample_, const int NumParameter_, const int NumDimension_ = 1)
 	: NumSample(NumSample_), TotNumSample(2*NumSample_), NumParameter(NumParameter_), NumDimension(NumDimension_) 
@@ -355,8 +360,7 @@ public:
 	_xi_copy(new double [NumDimension_])
 	{}
 
-	~FunctionalModelReal()
-	{
+	~FunctionalModelReal() {
 		if(_xi_copy != nullptr) { delete [] _xi_copy; }
 	}
 
@@ -374,6 +378,9 @@ private:
 
 class FunctionalModelComplex : public BaseModelComplex
 {
+
+using dcomplex = std::complex<double>;
+
 public:
 	FunctionalModelComplex(const std::function<dcomplex(const double*, const dcomplex*)> model_f_,
 	const int NumSample_, const int NumParameter_, const int NumDimension_ = 1)
@@ -381,8 +388,7 @@ public:
 	_xi_copy(new dcomplex [NumDimension_])
 	{}
 
-	~FunctionalModelComplex()
-	{
+	~FunctionalModelComplex() {
 		if(_xi_copy != nullptr) { delete [] _xi_copy; }
 	}
 
@@ -453,7 +459,7 @@ void Levenberg_Marquardt(const BaseModelType& model, double* parameter, const in
 	{
 		iter += 1;
 	
-		//std::cout<<"(iter:"<<iter<<", cost:"<<initial<<")"<<std::endl;
+		std::cout<<"(iter:"<<iter<<", cost:"<<initial<<")"<<std::endl;
 
 		model.get_jacobian(&p[0] ,&Jacobian[0]);
 
@@ -551,7 +557,7 @@ void Levenberg_Marquardt(const BaseModelType& model, double* parameter, const in
 	std::cout<<"(iter:"<<iter<<", cost:"<<initial<<")"<<std::endl;
 
 	for(int i=0;i<Np;i++) {
-		std::cout<<FCYN("p[")<<i<<FCYN("] = ")<<p[i]<<"  ";
+		std::cout<<FCYN("p[")<<i<<FCYN("] = ")<<p[i]<<";  ";
 	}
 	std::cout<<std::endl;
 #endif
