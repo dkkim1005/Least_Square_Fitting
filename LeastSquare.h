@@ -529,8 +529,9 @@ void Levenberg_Marquardt(const BaseModelType& model, double* parameter, const in
 
 				break;
 			}
-			else
+			else {
 				std::memcpy(&p[0], &p_after[0], sizeof(double)*Np);
+			}
 		}
 		else
 		{
@@ -546,8 +547,9 @@ void Levenberg_Marquardt(const BaseModelType& model, double* parameter, const in
 #endif
 				break;
 			}
-			else
+			else {
 				std::memcpy(&p[0], &p_before[0], sizeof(double)*Np);
+			}
 		}
 	}
 
