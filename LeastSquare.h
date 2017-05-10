@@ -11,7 +11,7 @@
 #ifndef LEAST_SQUARE_FITTING
 #define LEAST_SQUARE_FITTING
 
-#define PRINT_RESULT
+//#define PRINT_RESULT
 
 // Ref : https://github.com/gon1332/fort320/blob/master/include/Utils/colors.h
 #ifndef _COLORS_
@@ -437,7 +437,7 @@ void loadtxt(const char fileName[], const int numDimX,
 
 
 template<typename BaseModelType>
-void Levenberg_Marquardt(const BaseModelType& model, double* parameter, const int Iter = (int)1e4, const double Tol = 1e-4)
+void Levenberg_Marquardt(const BaseModelType& model, double* parameter, const int Iter = (int)1e4, const double Tol = 1e-4, const int printlog = 0)
 {
 	const char TRANS = 'N', CMODE = 'T';
 	const double ALPHA = 1., BETA = 0, nu = 2.;
@@ -459,7 +459,7 @@ void Levenberg_Marquardt(const BaseModelType& model, double* parameter, const in
 	{
 		iter += 1;
 	
-		std::cout<<"(iter:"<<iter<<", cost:"<<initial<<")"<<std::endl;
+		//std::cout<<"(iter:"<<iter<<", cost:"<<initial<<")"<<std::endl;
 
 		model.get_jacobian(&p[0] ,&Jacobian[0]);
 
@@ -529,9 +529,8 @@ void Levenberg_Marquardt(const BaseModelType& model, double* parameter, const in
 
 				break;
 			}
-			else {
+			else
 				std::memcpy(&p[0], &p_after[0], sizeof(double)*Np);
-			}
 		}
 		else
 		{
@@ -547,22 +546,18 @@ void Levenberg_Marquardt(const BaseModelType& model, double* parameter, const in
 #endif
 				break;
 			}
-			else {
+			else
 				std::memcpy(&p[0], &p_before[0], sizeof(double)*Np);
-			}
 		}
 	}
 
 	std::memcpy(parameter, &p[0], sizeof(double)*Np);
 
-#ifdef PRINT_RESULT
-	std::cout<<"(iter:"<<iter<<", cost:"<<initial<<")"<<std::endl;
-
-	for(int i=0;i<Np;i++) {
-		std::cout<<FCYN("p[")<<i<<FCYN("] = ")<<p[i]<<";  ";
+	if(printlog == 1) 
+	{
+		std::cout<<"#----- fitting process is done. -----"<<std::endl;
+		std::cout<<"(iter:"<<iter<<", cost:"<<initial<<")"<<std::endl;
 	}
-	std::cout<<std::endl;
-#endif
 }
 
 } // namespace LeastSquare
