@@ -1,1 +1,2 @@
-# Least_Square_Fitting
+# Least Square Fitting
+Implementation of Levenberg–Marquardt algorithm
